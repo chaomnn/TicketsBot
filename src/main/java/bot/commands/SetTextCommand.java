@@ -1,7 +1,6 @@
 package bot.commands;
 
 import bot.BotHelper;
-import bot.BotUtils;
 import bot.utils.MarkupUtils;
 import db.DatabaseManager;
 import org.apache.log4j.Level;
@@ -33,7 +32,7 @@ public class SetTextCommand extends BotCommand {
         var replyToMessage = message.getReplyToMessage();
         var chatId = message.getChatId();
         Logger.getRootLogger().log(Level.INFO, "SetTextCommand, chatId: " + chatId);
-        if (chatId.equals(BotUtils.ID_BOT_ADMIN) || chatId.equals(BotUtils.ID_BOT_OWNER)) {
+        if (chatId.equals(BotHelper.getBotAdmin()) || chatId.equals(BotHelper.getBotOwner())) {
             try {
                 if (replyToMessage == null) {
                     absSender.execute(SendMessage.builder()

@@ -1,5 +1,5 @@
 import bot.Bot;
-import bot.BotUtils;
+import bot.BotHelper;
 import db.DatabaseManager;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
@@ -11,7 +11,10 @@ public class Application {
         try {
             DatabaseManager.getInstance().connect();
             var botsApi = new TelegramBotsApi(DefaultBotSession.class);
-            botsApi.registerBot(new Bot(BotUtils.BOT_USERNAME, BotUtils.BOT_TOKEN));
+            var properties = BotHelper.getProperties();
+            if (properties != null) {
+                botsApi.registerBot(new Bot(properties.getProperty("username"), properties.getProperty("token")));
+            }
         } catch (TelegramApiException e) {
             e.printStackTrace();
         }

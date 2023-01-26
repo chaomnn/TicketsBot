@@ -34,10 +34,8 @@ public class StartCommand extends BotCommand {
         var userId = user.getId();
         Logger.getRootLogger().log(Level.INFO, "StartCommand from user: userId: " + userId +
                 ", first name " + user.getFirstName() + ", last name: " + user.getLastName());
-        if (!DatabaseManager.getInstance().isUserSubscribed(userId)) {
-            // Add user to DB
-            DatabaseManager.getInstance().manageUserSubscription(userId, true);
-        }
+        // Add user to DB
+        DatabaseManager.getInstance().manageUserSubscription(userId, true);
         var buttonsList = new ArrayList<InlineKeyboardButton>();
         buttonsList.add(InlineKeyboardButton.builder()
                 .text(BUY_TICKET)

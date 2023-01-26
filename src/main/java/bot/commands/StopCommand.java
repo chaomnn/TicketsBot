@@ -22,10 +22,8 @@ public class StopCommand extends BotCommand {
     @Override
     public void execute(AbsSender absSender, User user, Chat chat, String[] arguments) {
         var userId = user.getId();
-        if (DatabaseManager.getInstance().isUserSubscribed(userId)) {
-            // Remove user from DB
-            DatabaseManager.getInstance().manageUserSubscription(userId, false);
-        }
+        // Remove user from DB
+        DatabaseManager.getInstance().manageUserSubscription(userId, false);
         try {
             absSender.execute(SendMessage.builder()
                     .chatId(chat.getId().toString())

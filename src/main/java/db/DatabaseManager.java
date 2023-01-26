@@ -6,8 +6,8 @@ import org.apache.log4j.Logger;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DatabaseManager {
 
@@ -18,9 +18,8 @@ public class DatabaseManager {
 
     private static final String CREATE_SUBSCRIBERS_TABLE =
             "CREATE TABLE IF NOT EXISTS Subscribers (userId LONG PRIMARY KEY)";
-    private static final String INSERT_SUBSCRIBER = "INSERT INTO Subscribers (userId) VALUES (?)";
+    private static final String INSERT_SUBSCRIBER = "INSERT OR IGNORE INTO Subscribers (userId) VALUES (?)";
     private static final String DELETE_SUBSCRIBER = "DELETE FROM Subscribers WHERE userId =?";
-    private static final String SELECT_SUBSCRIBER = "SELECT userId FROM Subscribers WHERE userId =?";
     private static final String SELECT_ALL_SUBSCRIBERS = "SELECT userId from Subscribers";
 
     private static final String CREATE_CONSTANTS_TABLE =
@@ -28,6 +27,12 @@ public class DatabaseManager {
     private static final String INSERT_CONSTANT =
             "INSERT OR REPLACE INTO Constants (textKey, textValue) VALUES (?,?)";
     private static final String SELECT_CONSTANT = "SELECT textValue FROM Constants where textKey =?";
+
+    private static final String CREATE_MAILING_TABLE =
+            "CREATE TABLE IF NOT EXISTS Mailing (userId LONG, messageId INTEGER, PRIMARY KEY(userId, messageId))";
+    private static final String INSERT_USER_MESSAGE_PAIR =
+            "INSERT OR IGNORE INTO Mailing (userId, messageId) VALUES (?,?)";
+    private static final String SELECT_USER_MESSAGE_PAIR = "SELECT 1 FROM Mailing WHERE userId =? AND messageId=?";
 
     private DatabaseManager() {}
 
@@ -49,6 +54,7 @@ public class DatabaseManager {
                 var statement = connection.createStatement();
                 statement.execute(CREATE_SUBSCRIBERS_TABLE);
                 statement.execute(CREATE_CONSTANTS_TABLE);
+                statement.execute(CREATE_MAILING_TABLE);
                 Logger.getRootLogger().log(Level.INFO, "Connecting to DB");
             }
         } catch (SQLException e) {
@@ -57,21 +63,6 @@ public class DatabaseManager {
     }
 
     // Methods to work with subscribers
-    public boolean isUserSubscribed(Long userId) {
-        try (var preparedStatement = connection.prepareStatement(SELECT_SUBSCRIBER)) {
-            preparedStatement.setLong(1, userId);
-            var resultSet = preparedStatement.executeQuery();
-            if (resultSet.next()) {
-                Logger.getRootLogger().log(Level.INFO, "User " + userId + " is already subscribed");
-                return true;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        Logger.getRootLogger().log(Level.INFO, "User " + userId + " is not subscribed");
-        return false;
-    }
-
     public void manageUserSubscription(Long userId, boolean subscribe) {
         if (connection != null) {
             try (var preparedStatement = connection.prepareStatement(subscribe ?
@@ -86,8 +77,8 @@ public class DatabaseManager {
         }
     }
 
-    public Set<Long> getAllSubscribers() {
-        var subscribers = new HashSet<Long>();
+    public List<Long> getAllSubscribers() {
+        var subscribers = new ArrayList<Long>();
         try (var preparedStatement = connection.prepareStatement(SELECT_ALL_SUBSCRIBERS)) {
             Logger.getRootLogger().log(Level.INFO, "Getting subscribers from DB");
             var resultSet = preparedStatement.executeQuery();
@@ -100,6 +91,34 @@ public class DatabaseManager {
         Logger.getRootLogger().log(Level.INFO, "There are " + subscribers.size() + " subscribers in DB");
 
         return subscribers;
+    }
+
+    public void userMailedSuccess(Long subscriberId, int messageId) {
+        if (connection != null) {
+            try (var preparedStatement = connection.prepareStatement(INSERT_USER_MESSAGE_PAIR)) {
+                Logger.getRootLogger().log(Level.INFO, "User " + subscriberId + " mail success, message id: "
+                        + messageId);
+                preparedStatement.setLong(1, subscriberId);
+                preparedStatement.setInt(2, messageId);
+                preparedStatement.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public boolean hasUserBeenMailed(Long subscriberId, int messageId) {
+        try (var preparedStatement = connection.prepareStatement(SELECT_USER_MESSAGE_PAIR)) {
+            preparedStatement.setLong(1, subscriberId);
+            preparedStatement.setInt(1, messageId);
+            var resultSet = preparedStatement.executeQuery();
+            if (resultSet.next()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     // Methods to work with bot message constants

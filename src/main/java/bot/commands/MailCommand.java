@@ -2,7 +2,6 @@ package bot.commands;
 
 import bot.Bot;
 import bot.BotHelper;
-import bot.BotUtils;
 import bot.utils.MarkupUtils;
 import db.DatabaseManager;
 import org.apache.log4j.Level;
@@ -14,6 +13,7 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Message;
+import org.telegram.telegrambots.meta.api.objects.MessageEntity;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -23,6 +23,9 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class MailCommand extends BotCommand {
@@ -38,6 +41,11 @@ public class MailCommand extends BotCommand {
                     "допиши /button *название кнопки* в конце сообщения рассылки, и напиши ее текст или ссылку " +
                     "на следущей строке";
 
+    private static final int LIMIT = 30;
+
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private static final int delay = 2;
+
     public MailCommand() {
         super(MAIL_COMMAND, DESCRIPTION);
     }
@@ -48,7 +56,7 @@ public class MailCommand extends BotCommand {
         var replyToMessage = message.getReplyToMessage();
         var chatId = message.getChatId();
         Logger.getRootLogger().log(Level.INFO, "MailCommand, chatId: " + chatId);
-        if (chatId.equals(BotUtils.ID_BOT_ADMIN) || chatId.equals(BotUtils.ID_BOT_OWNER)) {
+        if (chatId.equals(BotHelper.getBotAdmin()) || chatId.equals(BotHelper.getBotOwner())) {
             try {
                 if (replyToMessage == null) {
                     absSender.execute(SendMessage.builder()
@@ -58,10 +66,9 @@ public class MailCommand extends BotCommand {
                     return;
                 }
                 var subscribers = DatabaseManager.getInstance().getAllSubscribers();
-                subscribers.remove(BotUtils.ID_BOT_ADMIN);
-                subscribers.remove(BotUtils.ID_BOT_OWNER);
                 InputFile inputFile = null;
                 var inlineButtons = new InlineKeyboardMarkup();
+                inlineButtons.setKeyboard(new ArrayList<>());
 
                 if (replyToMessage.hasPhoto()) {
                     // Get the picture from message
@@ -88,8 +95,7 @@ public class MailCommand extends BotCommand {
                             inlineButton.setUrl(content);
                         } else {
                             // It's a button with message callback
-                            DatabaseManager.getInstance().setConstant(name, content);
-                            inlineButton.setCallbackData(name);
+                            inlineButton.setCallbackData(content);
                         }
                         buttonsList.add(Collections.singletonList(inlineButton));
                     }
@@ -97,46 +103,87 @@ public class MailCommand extends BotCommand {
                 }
                 var entities = replyToMessage.hasPhoto() ?
                         replyToMessage.getCaptionEntities() : replyToMessage.getEntities();
-                entities = entities
-                        .stream()
-                        .filter(e -> e.getOffset() < texts[0].length())
-                        .peek(e -> {
-                            if (e.getOffset() + e.getLength() > texts[0].length()) {
-                                var diff = e.getOffset() + e.getLength() - texts[0].length();
-                                e.setLength(e.getLength() - diff);
-                            }
-                        })
-                        .collect(Collectors.toList());
-                // Send message to subscribers
-                Logger.getRootLogger().log(Level.INFO, "Starting to mail message to subscribers");
-                for (var subscriberId : subscribers) {
-                    if (replyToMessage.hasPhoto() && inputFile != null) {
-                        absSender.execute(SendPhoto.builder()
-                                .chatId(subscriberId)
-                                .photo(inputFile)
-                                .captionEntities(entities)
-                                .replyMarkup(inlineButtons)
-                                .caption(texts[0])
-                                .build());
-                    } else {
-                        absSender.execute(SendMessage.builder()
-                                .entities(entities)
-                                .chatId(subscriberId)
-                                .text(texts[0])
-                                .replyMarkup(inlineButtons)
-                                .build());
+                // Filter entities so they don't include button entities
+                if (entities != null && texts.length > 1) {
+                    entities = entities
+                            .stream()
+                            .filter(e -> e.getOffset() < texts[0].length())
+                            .peek(e -> {
+                                if (e.getOffset() + e.getLength() > texts[0].length()) {
+                                    var diff = e.getOffset() + e.getLength() - texts[0].length();
+                                    e.setLength(e.getLength() - diff);
+                                }
+                            })
+                            .collect(Collectors.toList());
+                }
+                // Split users into lists of 30 elements
+                List<List<Long>> listOfLists = new ArrayList<>();
+                if (subscribers.size() < LIMIT) {
+                    listOfLists.add(subscribers);
+                } else {
+                    var amount = subscribers.size() / LIMIT;
+                    var end = LIMIT;
+                    for (var begin = 0; begin < amount; begin++) {
+                        listOfLists.add(subscribers.subList(begin*LIMIT, end));
+                        end *=2;
+                    }
+                    if (end < subscribers.size()) {
+                        listOfLists.add(subscribers.subList(end, subscribers.size()));
                     }
                 }
-                absSender.execute(SendMessage.builder()
+                var file = inputFile;
+                var textEntities = entities;
+                // Send message to subscribers with 2 seconds delay per 30 users because of Telegram API limitations
+                Logger.getRootLogger().log(Level.INFO, "Starting to mail message to subscribers");
+                for (var i = 0; i < listOfLists.size(); i++) {
+                    var ind = i;
+                    scheduler.schedule(() ->
+                                    sendMessageToSubscribers(listOfLists.get(ind), absSender, replyToMessage.hasPhoto(),
+                                            file, textEntities, inlineButtons, texts[0], replyToMessage.getMessageId()),
+                            (long) delay*i,TimeUnit.SECONDS);
+                }
+                scheduler.schedule(() -> absSender.execute(SendMessage.builder()
                         .text(MAIL_CONFIRMATION + subscribers.size())
                         .chatId(message.getChatId())
-                        .build());
+                        .build()), (long) delay *listOfLists.size(), TimeUnit.SECONDS);
             } catch (TelegramApiException e) {
                 BotHelper.reportException(absSender, e);
                 e.printStackTrace();
             }
         } else {
             Logger.getRootLogger().log(Level.WARN, "User " + chatId + " is not authorized to use /mail command");
+        }
+    }
+
+    private void sendMessageToSubscribers(List<Long> subscribers, AbsSender absSender, boolean isPhoto,
+                                          InputFile photo, List<MessageEntity> entities,
+                                          InlineKeyboardMarkup inlineButtons, String text, int messageId) {
+        for (var subscriberId : subscribers) {
+            if (!DatabaseManager.getInstance().hasUserBeenMailed(subscriberId, messageId)) {
+                try {
+                    if (isPhoto && photo != null) {
+                        absSender.execute(SendPhoto.builder()
+                                .chatId(subscriberId)
+                                .photo(photo)
+                                .captionEntities(entities)
+                                .replyMarkup(inlineButtons)
+                                .caption(text)
+                                .build());
+                        DatabaseManager.getInstance().userMailedSuccess(subscriberId, messageId);
+                    } else {
+                        absSender.execute(SendMessage.builder()
+                                .entities(entities)
+                                .chatId(subscriberId)
+                                .text(text)
+                                .replyMarkup(inlineButtons)
+                                .build());
+                        DatabaseManager.getInstance().userMailedSuccess(subscriberId, messageId);
+                    }
+                } catch (TelegramApiException e) {
+                    e.printStackTrace();
+                    BotHelper.reportException(absSender, e);
+                }
+            }
         }
     }
 

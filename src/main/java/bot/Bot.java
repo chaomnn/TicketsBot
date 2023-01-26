@@ -1,8 +1,10 @@
 package bot;
 
 import bot.commands.MailCommand;
+import bot.commands.ReplyCommand;
 import bot.commands.SetTextCommand;
 import bot.commands.StartCommand;
+import bot.commands.StatsCommand;
 import bot.commands.StopCommand;
 import db.DatabaseManager;
 import org.apache.log4j.Level;
@@ -36,6 +38,8 @@ public class Bot extends TelegramLongPollingCommandBot {
         register(new SetTextCommand(SET_GREETING_COMMAND, DESCRIPTION_GREETING));
         register(new SetTextCommand(SET_BUTTON_COMMAND, DESCRIPTION_BUTTON));
         register(new MailCommand());
+        register(new StatsCommand());
+        register(new ReplyCommand());
     }
 
     @Override
@@ -55,11 +59,11 @@ public class Bot extends TelegramLongPollingCommandBot {
             if (update.hasMessage() && message.isUserMessage()) {
                 // Forward message to the admin
                 var chatId = message.getChatId();
-                if (!chatId.equals(BotUtils.ID_BOT_ADMIN) && !chatId.equals(BotUtils.ID_BOT_OWNER)) {
+                if (!chatId.equals(BotHelper.getBotOwner())) {
                     execute(ForwardMessage.builder()
                             .messageId(message.getMessageId())
                             .fromChatId(chatId)
-                            .chatId(BotUtils.ID_BOT_ADMIN)
+                            .chatId(BotHelper.getBotAdmin())
                             .build());
                     execute(SendMessage.builder()
                             .chatId(chatId)
@@ -84,7 +88,7 @@ public class Bot extends TelegramLongPollingCommandBot {
                 } else {
                     execute(SendMessage.builder()
                             .chatId(update.getCallbackQuery().getMessage().getChatId())
-                            .text(DatabaseManager.getInstance().getConstant(callbackData))
+                            .text(callbackData)
                             .parseMode(HTML)
                             .disableWebPagePreview(true)
                             .build());
