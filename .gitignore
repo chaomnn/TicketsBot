@@ -1,0 +1,6 @@
+.gradle/
+.idea/
+/build
+*.log
+*.db
+bot.properties
