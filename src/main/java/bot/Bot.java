@@ -88,7 +88,7 @@ public class Bot extends TelegramLongPollingCommandBot {
                 } else {
                     execute(SendMessage.builder()
                             .chatId(update.getCallbackQuery().getMessage().getChatId())
-                            .text(callbackData)
+                            .text(DatabaseManager.getInstance().getConstant(callbackData))
                             .parseMode(HTML)
                             .disableWebPagePreview(true)
                             .build());

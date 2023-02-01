@@ -23,6 +23,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -95,7 +96,9 @@ public class MailCommand extends BotCommand {
                             inlineButton.setUrl(content);
                         } else {
                             // It's a button with message callback
-                            inlineButton.setCallbackData(content);
+                            String buttonId = UUID.randomUUID().toString();
+                            DatabaseManager.getInstance().setConstant(buttonId, content);
+                            inlineButton.setCallbackData(buttonId);
                         }
                         buttonsList.add(Collections.singletonList(inlineButton));
                     }
