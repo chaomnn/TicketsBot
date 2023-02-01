@@ -122,10 +122,10 @@ public class MailCommand extends BotCommand {
                     listOfLists.add(subscribers);
                 } else {
                     var amount = subscribers.size() / LIMIT;
-                    var end = LIMIT;
+                    var end = 0;
                     for (var begin = 0; begin < amount; begin++) {
+                        end += 30;
                         listOfLists.add(subscribers.subList(begin*LIMIT, end));
-                        end +=30;
                     }
                     if (end < subscribers.size()) {
                         listOfLists.add(subscribers.subList(end, subscribers.size()));
