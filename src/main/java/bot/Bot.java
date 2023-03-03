@@ -15,10 +15,18 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 public class Bot extends TelegramLongPollingCommandBot {
 
-    private final String username;
     private final String token;
+    private final DatabaseManager databaseManager;
+    private final Future<String> username;
+
+    private static final ExecutorService executor = Executors.newFixedThreadPool(1);
 
     private static final String BUY_TICKET_CALLBACK = "buy_ticket";
     private static final String SET_GREETING_COMMAND = "setgreeting";
@@ -29,10 +37,11 @@ public class Bot extends TelegramLongPollingCommandBot {
 
     private static final String CONFIRMATION = "Ваше сообщение было переслано организаторам.";
 
-    public Bot(String username, String token) {
+    public Bot(String token) {
         super();
-        this.username = username;
         this.token = token;
+        this.username = executor.submit(() -> getMe().getUserName());
+        databaseManager = new DatabaseManager(this::getBotUsername);
         register(new StartCommand());
         register(new StopCommand());
         register(new SetTextCommand(SET_GREETING_COMMAND, DESCRIPTION_GREETING));
@@ -44,12 +53,20 @@ public class Bot extends TelegramLongPollingCommandBot {
 
     @Override
     public String getBotUsername() {
-        return username;
+        try {
+            return username.get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public String getBotToken() {
         return token;
+    }
+
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
     }
 
     @Override
@@ -79,16 +96,20 @@ public class Bot extends TelegramLongPollingCommandBot {
                 // Display instructions
                 var callbackData = update.getCallbackQuery().getData();
                 if (callbackData.equals(BUY_TICKET_CALLBACK)) {
+                    String text = databaseManager.getConstant(SET_BUTTON_COMMAND);
+                    if (text.isEmpty()) {
+                        return;
+                    }
                     execute(SendMessage.builder()
                             .chatId(update.getCallbackQuery().getMessage().getChatId())
-                            .text(DatabaseManager.getInstance().getConstant(SET_BUTTON_COMMAND))
+                            .text(text)
                             .parseMode(HTML)
                             .disableWebPagePreview(true)
                             .build());
                 } else {
                     execute(SendMessage.builder()
                             .chatId(update.getCallbackQuery().getMessage().getChatId())
-                            .text(DatabaseManager.getInstance().getConstant(callbackData))
+                            .text(databaseManager.getConstant(callbackData))
                             .parseMode(HTML)
                             .disableWebPagePreview(true)
                             .build());

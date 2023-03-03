@@ -1,7 +1,7 @@
 package bot.commands;
 
+import bot.Bot;
 import bot.BotHelper;
-import db.DatabaseManager;
 import org.telegram.telegrambots.extensions.bots.commandbot.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Chat;
@@ -23,7 +23,7 @@ public class StopCommand extends BotCommand {
     public void execute(AbsSender absSender, User user, Chat chat, String[] arguments) {
         var userId = user.getId();
         // Remove user from DB
-        DatabaseManager.getInstance().manageUserSubscription(userId, false);
+        ((Bot) absSender).getDatabaseManager().manageUserSubscription(userId, false);
         try {
             absSender.execute(SendMessage.builder()
                     .chatId(chat.getId().toString())

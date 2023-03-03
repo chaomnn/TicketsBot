@@ -1,7 +1,7 @@
 package bot.commands;
 
+import bot.Bot;
 import bot.BotHelper;
-import db.DatabaseManager;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.telegram.telegrambots.extensions.bots.commandbot.commands.BotCommand;
@@ -35,14 +35,15 @@ public class StartCommand extends BotCommand {
         Logger.getRootLogger().log(Level.INFO, "StartCommand from user: userId: " + userId +
                 ", first name " + user.getFirstName() + ", last name: " + user.getLastName());
         // Add user to DB
-        DatabaseManager.getInstance().manageUserSubscription(userId, true);
+        var db = ((Bot) absSender).getDatabaseManager();
+        db.manageUserSubscription(userId, true);
         var buttonsList = new ArrayList<InlineKeyboardButton>();
         buttonsList.add(InlineKeyboardButton.builder()
                 .text(BUY_TICKET)
                 .callbackData(BUY_TICKET_CALLBACK)
                 .build());
         try {
-            var greeting = DatabaseManager.getInstance().getConstant(GREETING_KEY);
+            var greeting = db.getConstant(GREETING_KEY);
             absSender.execute(SendMessage.builder()
                     .chatId(chat.getId().toString())
                     .text(greeting.isEmpty() ? DEFAULT_MESSAGE : greeting)

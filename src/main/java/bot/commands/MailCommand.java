@@ -56,6 +56,7 @@ public class MailCommand extends BotCommand {
         super.processMessage(absSender, message, arguments);
         var replyToMessage = message.getReplyToMessage();
         var chatId = message.getChatId();
+        var db = ((Bot) absSender).getDatabaseManager();
         Logger.getRootLogger().log(Level.INFO, "MailCommand, chatId: " + chatId);
         if (chatId.equals(BotHelper.getBotAdmin()) || chatId.equals(BotHelper.getBotOwner())) {
             try {
@@ -66,7 +67,7 @@ public class MailCommand extends BotCommand {
                             .build());
                     return;
                 }
-                var subscribers = DatabaseManager.getInstance().getAllSubscribers();
+                var subscribers = db.getAllSubscribers();
                 InputFile inputFile = null;
                 var inlineButtons = new InlineKeyboardMarkup();
                 inlineButtons.setKeyboard(new ArrayList<>());
@@ -80,30 +81,12 @@ public class MailCommand extends BotCommand {
                 }
                 var mailingText = replyToMessage.hasPhoto() ? replyToMessage.getCaption() : replyToMessage.getText();
                 var texts = mailingText.split("(^|\\n)/button: *");
+
                 if (mailingText.contains(ATTACH_BUTTON)) {
                     // Attach button(s) to message
-                    List<List<InlineKeyboardButton>> buttonsList = new ArrayList<>();
-                    var textsWithMarkup =
-                            MarkupUtils.getMessageTextWithMarkup(replyToMessage).split("(^|\\n)/button: *");
-                    for (var i = 1; i < textsWithMarkup.length; i++) {
-                        var inlineButton = new InlineKeyboardButton();
-                        var buttonContents = textsWithMarkup[i].split("\n", 2);
-                        var name = buttonContents[0].trim();
-                        inlineButton.setText(name);
-                        var content = buttonContents[1].trim();
-                        if (content.startsWith(LINK_PREFIX)) {
-                            // It's a link button
-                            inlineButton.setUrl(content);
-                        } else {
-                            // It's a button with message callback
-                            String buttonId = UUID.randomUUID().toString();
-                            DatabaseManager.getInstance().setConstant(buttonId, content);
-                            inlineButton.setCallbackData(buttonId);
-                        }
-                        buttonsList.add(Collections.singletonList(inlineButton));
-                    }
-                    inlineButtons.setKeyboard(buttonsList);
+                    inlineButtons.setKeyboard(getButtonsList(replyToMessage, db));
                 }
+
                 var entities = replyToMessage.hasPhoto() ?
                         replyToMessage.getCaptionEntities() : replyToMessage.getEntities();
                 // Filter entities so they don't include button entities
@@ -120,20 +103,7 @@ public class MailCommand extends BotCommand {
                             .collect(Collectors.toList());
                 }
                 // Split users into lists of 30 elements
-                List<List<Long>> listOfLists = new ArrayList<>();
-                if (subscribers.size() < LIMIT) {
-                    listOfLists.add(subscribers);
-                } else {
-                    var amount = subscribers.size() / LIMIT;
-                    var end = 0;
-                    for (var begin = 0; begin < amount; begin++) {
-                        end += 30;
-                        listOfLists.add(subscribers.subList(begin*LIMIT, end));
-                    }
-                    if (end < subscribers.size()) {
-                        listOfLists.add(subscribers.subList(end, subscribers.size()));
-                    }
-                }
+                List<List<Long>> listOfLists = getSubscribersLists(subscribers);
                 var file = inputFile;
                 var textEntities = entities;
                 // Send message to subscribers with 2 seconds delay per 30 users because of Telegram API limitations
@@ -142,7 +112,8 @@ public class MailCommand extends BotCommand {
                     var ind = i;
                     scheduler.schedule(() ->
                                     sendMessageToSubscribers(listOfLists.get(ind), absSender, replyToMessage.hasPhoto(),
-                                            file, textEntities, inlineButtons, texts[0], replyToMessage.getMessageId()),
+                                            file, textEntities, inlineButtons, texts[0],
+                                            replyToMessage.getMessageId(), db),
                             (long) delay*i,TimeUnit.SECONDS);
                 }
                 scheduler.schedule(() -> absSender.execute(SendMessage.builder()
@@ -158,11 +129,53 @@ public class MailCommand extends BotCommand {
         }
     }
 
+    private List<List<Long>> getSubscribersLists(List<Long> subscribers) {
+        List<List<Long>> listOfLists = new ArrayList<>();
+        if (subscribers.size() < LIMIT) {
+            listOfLists.add(subscribers);
+        } else {
+            var amount = subscribers.size() / LIMIT;
+            var end = 0;
+            for (var begin = 0; begin < amount; begin++) {
+                end += 30;
+                listOfLists.add(subscribers.subList(begin*LIMIT, end));
+            }
+            if (end < subscribers.size()) {
+                listOfLists.add(subscribers.subList(end, subscribers.size()));
+            }
+        }
+        return listOfLists;
+    }
+
+    private List<List<InlineKeyboardButton>> getButtonsList(Message replyToMessage, DatabaseManager db) {
+        List<List<InlineKeyboardButton>> buttonsList = new ArrayList<>();
+        var textsWithMarkup = MarkupUtils.getMessageTextWithMarkup(replyToMessage).split("(^|\\n)/button: *");
+        for (var i = 1; i < textsWithMarkup.length; i++) {
+            var inlineButton = new InlineKeyboardButton();
+            var buttonContents = textsWithMarkup[i].split("\n", 2);
+            var name = buttonContents[0].trim();
+            inlineButton.setText(name);
+            var content = buttonContents[1].trim();
+            if (content.startsWith(LINK_PREFIX)) {
+                // It's a link button
+                inlineButton.setUrl(content);
+            } else {
+                // It's a button with message callback
+                String buttonId = UUID.randomUUID().toString();
+                db.setConstant(buttonId, content);
+                inlineButton.setCallbackData(buttonId);
+            }
+            buttonsList.add(Collections.singletonList(inlineButton));
+        }
+        return buttonsList;
+    }
+
     private void sendMessageToSubscribers(List<Long> subscribers, AbsSender absSender, boolean isPhoto,
                                           InputFile photo, List<MessageEntity> entities,
-                                          InlineKeyboardMarkup inlineButtons, String text, int messageId) {
+                                          InlineKeyboardMarkup inlineButtons, String text, int messageId,
+                                          DatabaseManager db) {
         for (var subscriberId : subscribers) {
-            if (!DatabaseManager.getInstance().hasUserBeenMailed(subscriberId, messageId)) {
+            if (!db.hasUserBeenMailed(subscriberId, messageId)) {
                 try {
                     if (isPhoto && photo != null) {
                         absSender.execute(SendPhoto.builder()
@@ -172,7 +185,7 @@ public class MailCommand extends BotCommand {
                                 .replyMarkup(inlineButtons)
                                 .caption(text)
                                 .build());
-                        DatabaseManager.getInstance().userMailedSuccess(subscriberId, messageId);
+                        db.userMailedSuccess(subscriberId, messageId);
                     } else {
                         absSender.execute(SendMessage.builder()
                                 .entities(entities)
@@ -180,7 +193,7 @@ public class MailCommand extends BotCommand {
                                 .text(text)
                                 .replyMarkup(inlineButtons)
                                 .build());
-                        DatabaseManager.getInstance().userMailedSuccess(subscriberId, messageId);
+                        db.userMailedSuccess(subscriberId, messageId);
                     }
                 } catch (TelegramApiException e) {
                     e.printStackTrace();

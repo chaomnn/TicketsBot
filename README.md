@@ -1,7 +1,7 @@
 Telegram bot created for the purpose of helping people to buy tickets for certain events online and notifying them
 about new events. Also forwards all non-command messages from users to the bot admin.
-Before starting the bot, first create a bot.properties file in the root project directory and write admin and owner
-chat id, bot id and bot token there.
+Before starting the bot, first create a JSON file named "bot.json" in the root project directory and write admin and
+owner chat ids (as long) and bot tokens (as a json string array) there.
 
 Main functionality:
 

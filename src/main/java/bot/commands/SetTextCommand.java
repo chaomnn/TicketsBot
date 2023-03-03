@@ -1,8 +1,8 @@
 package bot.commands;
 
+import bot.Bot;
 import bot.BotHelper;
 import bot.utils.MarkupUtils;
-import db.DatabaseManager;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.telegram.telegrambots.extensions.bots.commandbot.commands.BotCommand;
@@ -42,8 +42,8 @@ public class SetTextCommand extends BotCommand {
                     return;
                 }
                 Logger.getRootLogger().log(Level.INFO, "Setting new bot text");
-                DatabaseManager.getInstance().setConstant(getCommandIdentifier().equals(SET_GREETING_COMMAND) ?
-                        SET_GREETING_COMMAND : SET_BUTTON_COMMAND,
+                ((Bot) absSender).getDatabaseManager().setConstant(getCommandIdentifier().equals(SET_GREETING_COMMAND)
+                                ? SET_GREETING_COMMAND : SET_BUTTON_COMMAND,
                         MarkupUtils.getMessageTextWithMarkup(replyToMessage));
                 absSender.execute(SendMessage.builder()
                         .chatId(chatId)

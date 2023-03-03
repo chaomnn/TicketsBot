@@ -1,6 +1,5 @@
 import bot.Bot;
 import bot.BotHelper;
-import db.DatabaseManager;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
@@ -8,15 +7,19 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 public class Application {
 
     public static void main(String[] args) {
+        TelegramBotsApi botsApi;
         try {
-            DatabaseManager.getInstance().connect();
-            var botsApi = new TelegramBotsApi(DefaultBotSession.class);
-            var properties = BotHelper.getProperties();
-            if (properties != null) {
-                botsApi.registerBot(new Bot(properties.getProperty("username"), properties.getProperty("token")));
-            }
+            botsApi = new TelegramBotsApi(DefaultBotSession.class);
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        var tokens = BotHelper.getBotTokens();
+        for (String token : tokens) {
+            try {
+                botsApi.registerBot(new Bot(token));
+            } catch (TelegramApiException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 }

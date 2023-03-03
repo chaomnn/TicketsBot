@@ -1,7 +1,7 @@
 package bot.commands;
 
+import bot.Bot;
 import bot.BotHelper;
-import db.DatabaseManager;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.telegram.telegrambots.extensions.bots.commandbot.commands.BotCommand;
@@ -28,7 +28,7 @@ public class StatsCommand extends BotCommand {
         if (chatId.equals(BotHelper.getBotAdmin()) || chatId.equals(BotHelper.getBotOwner())) {
             try {
                 absSender.execute(SendMessage.builder()
-                        .text(STATISTICS + DatabaseManager.getInstance().getAllSubscribers().size())
+                        .text(STATISTICS + ((Bot) absSender).getDatabaseManager().getAllSubscribers().size())
                         .chatId(chatId)
                         .build());
             } catch (TelegramApiException e) {
